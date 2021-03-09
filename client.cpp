@@ -9,7 +9,7 @@
 #include <arpa/inet.h>
 #include <signal.h>
 #define DEBUG
-
+#define PROTOCOL "RPS UDP 1.0\n"
 void intSignal(int sig)
 {
     exit(0);
@@ -67,26 +67,22 @@ int main(int argc, char *argv[])
     }
 
     ssize_t sentbytes;
-    msg.type = htons(22);
-    msg.message = htonl(0);
-    msg.protocol = htons(17);
-    msg.major_version = htons(1);
-    msg.minor_version = htons(0);
-
-    printf("Message sent.\n");
 
     socklen_t addr_len = sizeof(servaddr);
     int bytes = -1;
     int tries = 0;
+    char recvBuf[256];
+    bool isRunning = true;
     signal(SIGINT, intSignal);
     while (tries < 3 && bytes < 0)
     {
-        if ((sentbytes = sendto(sockfd, &msg, sizeof(msg), 0, p->ai_addr, p->ai_addrlen)) == -1)
+        memset(recvBuf, 0, sizeof(recvBuf));
+        if ((sentbytes = sendto(sockfd, PROTOCOL, sizeof(PROTOCOL), 0, p->ai_addr, p->ai_addrlen)) == -1)
         {
             printf("Failed to send via sento function. \n");
             exit(0);
         }
-        bytes = recvfrom(sockfd, &protmsg, sizeof(protmsg), 0, (struct sockaddr *)&servaddr, &addr_len);
+        bytes = recvfrom(sockfd, recvBuf, sizeof(recvBuf), 0, (struct sockaddr *)&servaddr, &addr_len);
         if (bytes == -1 && tries < 2)
         {
             printf("Server did not respond... Trying again.\n");
@@ -100,7 +96,15 @@ int main(int argc, char *argv[])
     }
     else
     {
-        sleep(3);
+        if(strcmp(recvBuf,"NOT OK\n") >= 0)
+        {
+            printf("Protocol not supported. Exiting... \n");
+            exit(0);
+        }
+        while(isRunning)
+        {
+            
+        }
     }
     close(sockfd);
     return 0;
