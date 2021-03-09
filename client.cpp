@@ -8,10 +8,12 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <signal.h>
+#include <iostream>
 #define DEBUG
 #define PROTOCOL "RPS UDP 1.0\n"
 void intSignal(int sig)
 {
+    printf("\n");
     exit(0);
 }
 int main(int argc, char *argv[])
@@ -72,7 +74,17 @@ int main(int argc, char *argv[])
     int bytes = -1;
     int tries = 0;
     char recvBuf[256];
+    char sendBuf[5];
     bool isRunning = true;
+    fd_set currentSockets;
+    fd_set readySockets;
+    FD_ZERO(&currentSockets);
+    FD_ZERO(&readySockets);
+    FD_SET(sockfd, &currentSockets);
+    FD_SET(STDIN_FILENO, &currentSockets);
+    int fdMax = sockfd;
+    int nfds = 0;
+    char writeBuf[3];
     signal(SIGINT, intSignal);
     while (tries < 3 && bytes < 0)
     {
@@ -96,14 +108,65 @@ int main(int argc, char *argv[])
     }
     else
     {
-        if(strcmp(recvBuf,"NOT OK\n") >= 0)
+        if (strstr(recvBuf, "ERROR") != nullptr)
         {
-            printf("Protocol not supported. Exiting... \n");
+            printf("%s", recvBuf);
             exit(0);
         }
-        while(isRunning)
+        else
         {
-            
+            printf("Protocol accepted. Protocol: %s%s", PROTOCOL, recvBuf);
+        }
+
+        while (isRunning)
+        {
+            readySockets = currentSockets;
+            if (fdMax < sockfd)
+            {
+                fdMax = sockfd;
+            }
+            nfds = select(fdMax + 1, &readySockets, NULL, NULL, NULL);
+            if (nfds == -1)
+            {
+                printf("Something went wrong with select\n");
+                break;
+            }
+            if (FD_ISSET(STDIN_FILENO, &readySockets))
+            {
+                memset(sendBuf, 0, sizeof(sendBuf));
+                memset(writeBuf, 0, sizeof(writeBuf));
+                std::cin.getline(writeBuf, sizeof(writeBuf));
+                std::cin.clear();
+                if (strlen(writeBuf) > 3)
+                {
+                    printf("Message too long, try again.\n");
+                    FD_CLR(STDIN_FILENO, &readySockets);
+                    break;
+                }
+                else if (strcmp(writeBuf, "0") == 0)
+                {
+                    isRunning = false;
+                }
+                else
+                {
+                    send(sockfd, sendBuf, strlen(sendBuf), 0);
+                    FD_CLR(STDIN_FILENO, &readySockets);
+                }
+            }
+            if (FD_ISSET(sockfd, &readySockets))
+            {
+                memset(recvBuf, 0, sizeof(recvBuf));
+                bytes = recv(sockfd, recvBuf, sizeof(recvBuf), 0);
+                if (bytes == -1)
+                {
+                    printf("Failed to recive. \n");
+                    continue;
+                }
+                else
+                {
+                    printf("%s", recvBuf);
+                }
+            }
         }
     }
     close(sockfd);

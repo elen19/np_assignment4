@@ -12,8 +12,8 @@
 #include <vector>
 
 #define MENU "Please select:\n1. Play\n2. Watch\n3. Scoreboard\n0. Quit\n"
+#define PROTOCOL "RPS UDP 1.0\n"
 
-int terminate = 0;
 struct cli
 {
   struct sockaddr_in adress;
@@ -22,11 +22,12 @@ struct cli
 std::vector<cli> clients;
 void checkJobbList(int signum)
 {
+  printf("Work work\n");
   struct timeval t;
-  printf("Let me be, I want to sleep.\n");
   gettimeofday(&t, NULL);
   for (size_t i = 0; i < clients.size(); i++)
   {
+    printf("Tid %ld\n", (t.tv_sec - clients.at(i).tid.tv_sec));
     if (t.tv_sec - clients.at(i).tid.tv_sec > 10)
     {
       clients.erase(clients.begin() + i);
@@ -92,9 +93,6 @@ int main(int argc, char *argv[])
     exit(0);
   }
 
-  /* 
-     Prepare to setup a reoccurring event every 10s. If it_interval, or it_value is omitted, it will be a single alarm 10s after it has been set. 
-  */
   struct itimerval alarmTime;
 
   alarmTime.it_interval.tv_sec = 2;
@@ -102,18 +100,64 @@ int main(int argc, char *argv[])
   alarmTime.it_value.tv_sec = 2;
   alarmTime.it_value.tv_usec = 2;
 
-  /* Regiter a callback function, associated with the SIGALRM signal, which will be raised when the alarm goes of */
   signal(SIGALRM, checkJobbList);
-  setitimer(ITIMER_REAL, &alarmTime, NULL); // Start/register the alarm.
+  setitimer(ITIMER_REAL, &alarmTime, NULL);
   int bytes = -1;
   client_len = sizeof(client);
   int clientNr = 0;
   int currentClient = -1;
-  while (terminate == 0)
+  fd_set currentSockets;
+  fd_set readySockets;
+  FD_ZERO(&currentSockets);
+  FD_ZERO(&readySockets);
+  FD_SET(sockfd, &currentSockets);
+  int fdMax = sockfd;
+  int nfds = 0;
+  char recvBuf[256];
+  char sendBuf[256];
+  bool clientFound = false;
+  while (true)
   {
-  
-
+    bytes = recvfrom(sockfd, recvBuf, sizeof(recvBuf), 0, (struct sockaddr *)&client, &client_len);
+    if (bytes < 0)
+    {
+      continue;
+    }
+    else
+    {
+      //check if client already exist, else check if protocol recived
+      clientFound = false;
+      for (size_t i = 0; i < clients.size() && !clientFound; i++)
+      {
+        if (clients.at(i).adress.sin_addr.s_addr == client.sin_addr.s_addr && clients.at(i).adress.sin_port == client.sin_port)
+        {
+          clientFound = true;
+          currentClient = i;
+        }
+      }
+      if (clientFound == false)
+      {
+        if (strcmp(recvBuf, PROTOCOL) >= 0)
+        {
+          struct cli newClient;
+          newClient.adress = client;
+          gettimeofday(&newClient.tid, NULL);
+          clients.push_back(newClient);
+          printf("Client added\n");
+          sendto(sockfd, MENU, sizeof(MENU), 0, (struct sockaddr *)&client, client_len);
+        }
+        else
+        {
+          sendto(sockfd, "ERROR Wrong protocol\n", sizeof("ERROR Wrong protocol\n"), 0, (struct sockaddr *)&client, client_len);
+        }
+      }
+      else
+      {
+        //check all messages and what's going on
+      }
+    }
   }
+
   close(sockfd);
   return (0);
 }
