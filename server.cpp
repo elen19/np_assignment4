@@ -18,20 +18,23 @@ struct cli
 {
   struct sockaddr_in adress;
   struct timeval tid;
+  bool isInGame;
+  bool isReady;
+  bool inQueue;
 };
-std::vector<cli> clients;
+std::vector<cli *> clients;
+std::vector<cli *> queues;
 void checkJobbList(int signum)
 {
-  printf("Work work\n");
   struct timeval t;
   gettimeofday(&t, NULL);
   for (size_t i = 0; i < clients.size(); i++)
   {
-    printf("Tid %ld\n", (t.tv_sec - clients.at(i).tid.tv_sec));
-    if (t.tv_sec - clients.at(i).tid.tv_sec > 10)
+    if (t.tv_sec - clients.at(i)->tid.tv_sec > 10)
     {
-      clients.erase(clients.begin() + i);
+      /*  clients.erase(clients.begin() + i);
       printf("Client slept...\n");
+      */
     }
   }
   return;
@@ -111,8 +114,6 @@ int main(int argc, char *argv[])
   FD_ZERO(&currentSockets);
   FD_ZERO(&readySockets);
   FD_SET(sockfd, &currentSockets);
-  int fdMax = sockfd;
-  int nfds = 0;
   char recvBuf[256];
   char sendBuf[256];
   bool clientFound = false;
@@ -127,9 +128,10 @@ int main(int argc, char *argv[])
     {
       //check if client already exist, else check if protocol recived
       clientFound = false;
+      currentClient = -1;
       for (size_t i = 0; i < clients.size() && !clientFound; i++)
       {
-        if (clients.at(i).adress.sin_addr.s_addr == client.sin_addr.s_addr && clients.at(i).adress.sin_port == client.sin_port)
+        if (clients.at(i)->adress.sin_addr.s_addr == client.sin_addr.s_addr && clients.at(i)->adress.sin_port == client.sin_port)
         {
           clientFound = true;
           currentClient = i;
@@ -142,7 +144,10 @@ int main(int argc, char *argv[])
           struct cli newClient;
           newClient.adress = client;
           gettimeofday(&newClient.tid, NULL);
-          clients.push_back(newClient);
+          newClient.isInGame = false;
+          newClient.isReady = false;
+          newClient.inQueue = false;
+          clients.push_back(&newClient);
           printf("Client added\n");
           sendto(sockfd, MENU, sizeof(MENU), 0, (struct sockaddr *)&client, client_len);
         }
@@ -154,6 +159,43 @@ int main(int argc, char *argv[])
       else
       {
         //check all messages and what's going on
+        if (clients.at(currentClient)->isInGame == false && clients.at(currentClient)->isReady == false && clients.at(currentClient)->inQueue == false)
+        {
+          if (strcmp(recvBuf, "1") == 0)
+          {
+            clients.at(currentClient)->inQueue = true;
+            queues.push_back(clients.at(currentClient));
+
+            if (queues.size() > 1)
+            {
+              for (size_t i = 0; i < 2; i++)
+              {
+                queues.at(i)->isInGame = true;
+              }
+              queues.erase(queues.begin(), queues.begin() + 2);
+              printf("Queue erased\n");
+            }
+          }
+        }
+        if (clients.at(currentClient)->isInGame == true && clients.at(currentClient)->isReady == false)
+        {
+          if (strcmp(recvBuf, "\n") == 0)
+          {
+            clients.at(currentClient)->isReady = true;
+          }
+        }
+        for (size_t i; i < clients.size(); i++)
+        {
+          printf("i=%d\n",(int)i);
+          if (clients.at(i)->inQueue == true && clients.at(i)->isInGame == false && clients.at(i)->isReady == false)
+          {
+            sendto(sockfd, "You are in queue, waiting for another client to connect.\n", sizeof("You are in queue, waiting for another client to connect.\n"), 0, (struct sockaddr *)&client, client_len);
+          }
+          else if (clients.at(i)->isInGame == true && clients.at(i)->isReady == false && clients.at(i)->inQueue == false)
+          {
+            sendto(sockfd, "Game is ready. Press Enter to confirm that you are ready.\n", sizeof("Game is ready. Press Enter to confirm that you are ready.\n"), 0, (struct sockaddr *)&client, client_len);
+          }
+        }
       }
     }
   }

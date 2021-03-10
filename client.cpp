@@ -84,7 +84,6 @@ int main(int argc, char *argv[])
     FD_SET(STDIN_FILENO, &currentSockets);
     int fdMax = sockfd;
     int nfds = 0;
-    char writeBuf[3];
     signal(SIGINT, intSignal);
     while (tries < 3 && bytes < 0)
     {
@@ -134,22 +133,15 @@ int main(int argc, char *argv[])
             if (FD_ISSET(STDIN_FILENO, &readySockets))
             {
                 memset(sendBuf, 0, sizeof(sendBuf));
-                memset(writeBuf, 0, sizeof(writeBuf));
-                std::cin.getline(writeBuf, sizeof(writeBuf));
+                std::cin.getline(sendBuf, sizeof(sendBuf));
                 std::cin.clear();
-                if (strlen(writeBuf) > 3)
-                {
-                    printf("Message too long, try again.\n");
-                    FD_CLR(STDIN_FILENO, &readySockets);
-                    break;
-                }
-                else if (strcmp(writeBuf, "0") == 0)
+                if (strcmp(sendBuf, "0") == 0)
                 {
                     isRunning = false;
                 }
                 else
                 {
-                    send(sockfd, sendBuf, strlen(sendBuf), 0);
+                    sendto(sockfd, sendBuf, sizeof(sendBuf), 0, p->ai_addr, p->ai_addrlen);
                     FD_CLR(STDIN_FILENO, &readySockets);
                 }
             }
