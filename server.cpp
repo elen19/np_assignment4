@@ -111,6 +111,7 @@ int main(int argc, char *argv[])
   int fdMax = sockfd;
   int nfds = 0;
   int reciver;
+  int cC = -1; //cC=currentClient
   //signal(SIGINT, intSignal);
   while (true)
   {
@@ -158,6 +159,7 @@ int main(int argc, char *argv[])
           {
             memset(recvBuf, 0, sizeof(recvBuf));
             reciver = recv(i, recvBuf, sizeof(recvBuf), 0);
+            printf("Rcv:%s\n\n", recvBuf);
             if (reciver <= 0)
             {
               close(i);
@@ -174,7 +176,55 @@ int main(int argc, char *argv[])
             }
             else if (strstr(recvBuf, "OK\n") != nullptr)
             {
-              send(i,MENU,strlen(MENU),0);
+              send(i, MENU, strlen(MENU), 0);
+            }
+            else if (strcmp(recvBuf, "1") == 0)
+            {
+              cC = -1;
+              for (size_t j = 0; j < clients.size() && cC == -1; j++)
+              {
+                if (clients.at(j)->sockID == i)
+                {
+                  cC = j;
+                }
+              }
+              if (cC > -1 && !clients.at(cC)->inQueue && !clients.at(cC)->isReady && !clients.at(cC)->isInGame)
+              {
+                clients.at(cC)->inQueue = true;
+                queues.push_back(clients.at(cC));
+                printf("In queue\n");
+                if (queues.size() < 2)
+                {
+                  send(i, "In queue, need another player to start game.\nPress 9 to leave queue.\n", strlen("In queue, need another player to start game.\nPress 9 to leave queue.\n"), 0);
+                }
+                else if (queues.size() >= 2)
+                {
+                  for (int j = 0; j < 2; j++)
+                  {
+                    queues.at(0)->inQueue = false;
+                    queues.at(0)->isInGame = true;
+                    send(queues.at(0)->sockID, "A game is ready, press r to be ready\n", strlen("A game is ready, press r to be ready\n"), 0);
+                    queues.erase(queues.begin());
+                  }
+                }
+              }
+            }
+            else if (strcmp(recvBuf, "9") == 0)
+            {
+              cC = -1;
+              for (size_t j = 0; j < queues.size() && cC == -1; j++)
+              {
+                if (queues.at(j)->sockID == i)
+                {
+                  cC = j;
+                }
+              }
+              if (cC > -1 && queues.at(cC)->inQueue && !queues.at(cC)->isReady && !queues.at(cC)->isInGame)
+              {
+                queues.at(cC)->inQueue = false;
+                queues.erase((queues.begin() + cC));
+                send(i, MENU, strlen(MENU), 0);
+              }
             }
             else
             {
