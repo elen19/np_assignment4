@@ -22,8 +22,9 @@ struct cli
   bool isReady;
   bool inQueue;
   int sockID;
+  int gameID;
 };
-std::vector<cli *> clients;
+std::vector<cli> clients;
 std::vector<cli *> queues;
 void checkJobbList(int signum)
 {
@@ -31,7 +32,7 @@ void checkJobbList(int signum)
   gettimeofday(&t, NULL);
   for (size_t i = 0; i < clients.size(); i++)
   {
-    if (t.tv_sec - clients.at(i)->tid.tv_sec > 10)
+    if (t.tv_sec - clients.at(i).tid.tv_sec > 10)
     {
       /*  clients.erase(clients.begin() + i);
       printf("Client slept...\n");
@@ -112,6 +113,7 @@ int main(int argc, char *argv[])
   int nfds = 0;
   int reciver;
   int cC = -1; //cC=currentClient
+  int gameID = 0;
   //signal(SIGINT, intSignal);
   while (true)
   {
@@ -141,9 +143,10 @@ int main(int argc, char *argv[])
             newClient.inQueue = false;
             newClient.isInGame = false;
             newClient.isReady = false;
+            newClient.gameID = -1;
             gettimeofday(&newClient.tid, NULL);
             FD_SET(newClient.sockID, &currentSockets);
-            clients.push_back(&newClient);
+            clients.push_back(newClient);
             char buf[sizeof(PROTOCOL)] = PROTOCOL;
             send(connfd, buf, strlen(buf), 0);
             printf("Server protocol %s", buf);
@@ -159,13 +162,12 @@ int main(int argc, char *argv[])
           {
             memset(recvBuf, 0, sizeof(recvBuf));
             reciver = recv(i, recvBuf, sizeof(recvBuf), 0);
-            printf("Rcv:%s\n\n", recvBuf);
             if (reciver <= 0)
             {
               close(i);
               for (size_t j = 0; j < clients.size(); j++)
               {
-                if (i == clients[j]->sockID)
+                if (i == clients[j].sockID)
                 {
                   clients.erase(clients.begin() + j);
                   FD_CLR(i, &currentSockets);
@@ -183,27 +185,31 @@ int main(int argc, char *argv[])
               cC = -1;
               for (size_t j = 0; j < clients.size() && cC == -1; j++)
               {
-                if (clients.at(j)->sockID == i)
+                if (clients.at(j).sockID == i)
                 {
                   cC = j;
                 }
               }
-              if (cC > -1 && !clients.at(cC)->inQueue && !clients.at(cC)->isReady && !clients.at(cC)->isInGame)
+              if (cC > -1 && !clients.at(cC).inQueue && !clients.at(cC).isReady && !clients.at(cC).isInGame)
               {
-                clients.at(cC)->inQueue = true;
-                queues.push_back(clients.at(cC));
-                printf("In queue\n");
+                clients.at(cC).inQueue = true;
+                queues.push_back(&clients.at(cC));
                 if (queues.size() < 2)
                 {
                   send(i, "In queue, need another player to start game.\nPress 9 to leave queue.\n", strlen("In queue, need another player to start game.\nPress 9 to leave queue.\n"), 0);
                 }
                 else if (queues.size() >= 2)
                 {
+                  gameID++;
                   for (int j = 0; j < 2; j++)
                   {
-                    queues.at(0)->inQueue = false;
-                    queues.at(0)->isInGame = true;
-                    send(queues.at(0)->sockID, "A game is ready, press r to be ready\n", strlen("A game is ready, press r to be ready\n"), 0);
+                    queues.at(j)->inQueue = false;
+                    queues.at(j)->isInGame = true;
+                    queues.at(j)->gameID = gameID;
+                    send(queues.at(j)->sockID, "A game is ready, press r to be ready\n", strlen("A game is ready, press r to be ready\n"), 0);
+                  }
+                  for (int j = 0; j < 2; j++)
+                  {
                     queues.erase(queues.begin());
                   }
                 }
@@ -224,6 +230,22 @@ int main(int argc, char *argv[])
                 queues.at(cC)->inQueue = false;
                 queues.erase((queues.begin() + cC));
                 send(i, MENU, strlen(MENU), 0);
+              }
+            }
+            else if (strcmp(recvBuf, "r") == 0)
+            {
+              cC = -1;
+              for (size_t j = 0; j < clients.size() && cC == -1; j++)
+              {
+                if (clients.at(j).sockID == i)
+                {
+                  cC = j;
+                }
+              }
+              if (cC > -1 && !clients.at(cC).inQueue && !clients.at(cC).isReady && clients.at(cC).isInGame)
+              {
+                clients.at(cC).isReady = true;
+                send(i,"123\n" , strlen("123\n"), 0);
               }
             }
             else
