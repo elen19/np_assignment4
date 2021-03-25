@@ -22,9 +22,15 @@ struct cli
   bool isReady;
   bool inQueue;
   int sockID;
-  int gameID;
+};
+struct game
+{
+  struct cli *player1;
+  struct cli *player2;
+  int p1score, p2score, winner;
 };
 std::vector<cli> clients;
+std::vector<game *> games;
 std::vector<cli *> queues;
 void checkJobbList(int signum)
 {
@@ -112,13 +118,27 @@ int main(int argc, char *argv[])
   int fdMax = sockfd;
   int nfds = 0;
   int reciver;
+  struct timeval t;
   int cC = -1; //cC=currentClient
-  int gameID = 0;
   //signal(SIGINT, intSignal);
   while (true)
   {
     readySockets = currentSockets;
-
+    for (size_t i = 0; i < games.size(); i++)
+    {
+      gettimeofday(&t, NULL);
+      printf("tid: %ld\n",(t.tv_sec - games.at(i)->player1->tid.tv_sec));
+      if (t.tv_usec - games.at(i)->player1->tid.tv_usec > 200000)
+      {
+        printf("Hej\n");
+        send(games.at(i)->player1->sockID, "Hejhej\n", strlen("Hejhej\n"), 0);
+      }
+      else if (t.tv_usec - games.at(i)->player2->tid.tv_usec > 200000)
+      {
+        printf("Hej2\n");
+        send(games.at(i)->player2->sockID, "Hejhej\n", strlen("Hejhej\n"), 0);
+      }
+    }
     nfds = select(fdMax + 1, &readySockets, NULL, NULL, NULL);
     if (nfds == -1)
     {
@@ -143,7 +163,6 @@ int main(int argc, char *argv[])
             newClient.inQueue = false;
             newClient.isInGame = false;
             newClient.isReady = false;
-            newClient.gameID = -1;
             gettimeofday(&newClient.tid, NULL);
             FD_SET(newClient.sockID, &currentSockets);
             clients.push_back(newClient);
@@ -162,6 +181,20 @@ int main(int argc, char *argv[])
           {
             memset(recvBuf, 0, sizeof(recvBuf));
             reciver = recv(i, recvBuf, sizeof(recvBuf), 0);
+            if (reciver > 0)
+            {
+              for (size_t j = 0; j < games.size(); j++)
+              {
+                if (games.at(j)->player1->sockID == i)
+                {
+                  gettimeofday(&games.at(j)->player1->tid, NULL);
+                }
+                else if (games.at(j)->player2->sockID == i)
+                {
+                  gettimeofday(&games.at(j)->player2->tid, NULL);
+                }
+              }
+            }
             if (reciver <= 0)
             {
               close(i);
@@ -200,12 +233,17 @@ int main(int argc, char *argv[])
                 }
                 else if (queues.size() >= 2)
                 {
-                  gameID++;
+                  struct game newGame;
+                  newGame.p1score = 0;
+                  newGame.p2score = 0;
+                  newGame.winner = -1;
+                  newGame.player1 = queues.at(0);
+                  newGame.player2 = queues.at(1);
+                  games.push_back(&newGame);
                   for (int j = 0; j < 2; j++)
                   {
                     queues.at(j)->inQueue = false;
                     queues.at(j)->isInGame = true;
-                    queues.at(j)->gameID = gameID;
                     send(queues.at(j)->sockID, "A game is ready, press r to be ready\n", strlen("A game is ready, press r to be ready\n"), 0);
                   }
                   for (int j = 0; j < 2; j++)
@@ -245,7 +283,7 @@ int main(int argc, char *argv[])
               if (cC > -1 && !clients.at(cC).inQueue && !clients.at(cC).isReady && clients.at(cC).isInGame)
               {
                 clients.at(cC).isReady = true;
-                send(i,"123\n" , strlen("123\n"), 0);
+                send(i, "Waiting for other player to be ready.\n", strlen("Waiting for other player to be ready.\n"), 0);
               }
             }
             else
