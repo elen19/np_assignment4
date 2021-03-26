@@ -13,6 +13,7 @@
 #include <errno.h>
 
 #define MENU "Please select:\n1. Play\n2. Watch\n3. Scoreboard\n0. Quit\n"
+#define OPTIONS "Please select an option!\n1.Rock\n2.Paper\n3.Scissor\n"
 #define PROTOCOL "RPS TCP 1.0\n"
 
 struct cli
@@ -27,24 +28,14 @@ struct game
 {
   struct cli *player1;
   struct cli *player2;
-  int p1score, p2score, winner;
+  int p1score, p2score, winner, p1Option, p2Option;
 };
 std::vector<cli> clients;
 std::vector<game *> games;
 std::vector<cli *> queues;
 void checkJobbList(int signum)
 {
-  struct timeval t;
-  gettimeofday(&t, NULL);
-  for (size_t i = 0; i < clients.size(); i++)
-  {
-    if (t.tv_sec - clients.at(i).tid.tv_sec > 10)
-    {
-      /*  clients.erase(clients.begin() + i);
-      printf("Client slept...\n");
-      */
-    }
-  }
+
   return;
 }
 
@@ -107,6 +98,7 @@ int main(int argc, char *argv[])
     printf("Failed to listen.\n");
     exit(0);
   }
+
   len = sizeof(client);
   char recvBuf[256];
   char sendBuf[256];
@@ -119,32 +111,80 @@ int main(int argc, char *argv[])
   int nfds = 0;
   int reciver;
   struct timeval t;
+  struct timeval gameTime;
+  t.tv_sec = 0;
+  t.tv_usec = 1000000;
+  gameTime.tv_sec = 0;
+  gameTime.tv_usec = 0;
   int cC = -1; //cC=currentClient
   //signal(SIGINT, intSignal);
   while (true)
   {
     readySockets = currentSockets;
+
     for (size_t i = 0; i < games.size(); i++)
     {
-      gettimeofday(&t, NULL);
-      printf("tid: %ld\n",(t.tv_sec - games.at(i)->player1->tid.tv_sec));
-      if (t.tv_usec - games.at(i)->player1->tid.tv_usec > 200000)
+      if (games.at(i)->p1Option != 0 && games.at(i)->p2Option != 0)
       {
-        printf("Hej\n");
+        if (games.at(i)->p1Option == 1 && games.at(i)->p2Option == 2)
+        {
+          games.at(i)->p2score++;
+        }
+        else if (games.at(i)->p1Option == 1 && games.at(i)->p2Option == 3)
+        {
+          games.at(i)->p1score++;
+        }
+        else if (games.at(i)->p1Option == 2 && games.at(i)->p2Option == 1)
+        {
+          games.at(i)->p1score++;
+        }
+        else if (games.at(i)->p1Option == 2 && games.at(i)->p2Option == 3)
+        {
+          games.at(i)->p2score++;
+        }
+        else if (games.at(i)->p1Option == 3 && games.at(i)->p2Option == 1)
+        {
+          games.at(i)->p2score++;
+        }
+        else if (games.at(i)->p1Option == 3 && games.at(i)->p2Option == 2)
+        {
+          games.at(i)->p1score++;
+        }
+        games.at(i)->p1Option = 0;
+        games.at(i)->p2Option = 0;
+        printf("Score %d - %d\n", games.at(i)->p1score, games.at(i)->p2score);
+        sscanf(sendBuf, "Score %d - %d\n", games.at(i)->p1score, games.at(i)->p2score);
+        printf("%s",sendBuf);
+        send(games.at(i)->player1->sockID, sendBuf, strlen(sendBuf), 0);
+        send(games.at(i)->player2->sockID, sendBuf, strlen(sendBuf), 0);
+        if (games.at(i)->p1score < 3 && games.at(i)->p2score < 3)
+        {
+          send(games.at(i)->player1->sockID, OPTIONS, strlen(OPTIONS), 0);
+          send(games.at(i)->player2->sockID, OPTIONS, strlen(OPTIONS), 0);
+        }
+      }
+      /*gettimeofday(&gameTime, NULL);
+      if ((gameTime.tv_usec - games.at(i)->player1->tid.tv_usec) > 200000)
+      {
         send(games.at(i)->player1->sockID, "Hejhej\n", strlen("Hejhej\n"), 0);
       }
-      else if (t.tv_usec - games.at(i)->player2->tid.tv_usec > 200000)
+      if ((gameTime.tv_usec - games.at(i)->player2->tid.tv_usec) > 200000)
       {
-        printf("Hej2\n");
         send(games.at(i)->player2->sockID, "Hejhej\n", strlen("Hejhej\n"), 0);
-      }
+      }*/
     }
-    nfds = select(fdMax + 1, &readySockets, NULL, NULL, NULL);
+
+    nfds = select(fdMax + 1, &readySockets, NULL, NULL, &t);
     if (nfds == -1)
     {
+
       printf("Something went wrong with select.\n");
       printf("%s\n", strerror(errno));
       break;
+    }
+    if (nfds == 0)
+    {
+      t.tv_usec += 100000;
     }
     for (int i = sockfd; i < fdMax + 1; i++)
     {
@@ -177,21 +217,51 @@ int main(int argc, char *argv[])
         }
         else
         {
+          memset(recvBuf, 0, sizeof(recvBuf));
+          reciver = recv(i, recvBuf, sizeof(recvBuf), 0);
           if (clients.size() > 0)
           {
-            memset(recvBuf, 0, sizeof(recvBuf));
-            reciver = recv(i, recvBuf, sizeof(recvBuf), 0);
             if (reciver > 0)
             {
               for (size_t j = 0; j < games.size(); j++)
               {
                 if (games.at(j)->player1->sockID == i)
                 {
-                  gettimeofday(&games.at(j)->player1->tid, NULL);
+                  if (games.at(j)->p1Option == 0 && (strcmp(recvBuf, "1") == 0 || strcmp(recvBuf, "2") == 0 || strcmp(recvBuf, "3") == 0))
+                  {
+                    if (strcmp(recvBuf, "1") == 0)
+                    {
+                      games.at(j)->p1Option = 1;
+                    }
+                    else if (strcmp(recvBuf, "2") == 0)
+                    {
+                      games.at(j)->p1Option = 2;
+                    }
+                    else if (strcmp(recvBuf, "3") == 0)
+                    {
+                      games.at(j)->p1Option = 3;
+                    }
+                    gettimeofday(&games.at(j)->player1->tid, NULL);
+                  }
                 }
                 else if (games.at(j)->player2->sockID == i)
                 {
-                  gettimeofday(&games.at(j)->player2->tid, NULL);
+                  if (games.at(j)->p2Option == 0 && (strcmp(recvBuf, "1") == 0 || strcmp(recvBuf, "2") == 0 || strcmp(recvBuf, "3") == 0))
+                  {
+                    if (strcmp(recvBuf, "1") == 0)
+                    {
+                      games.at(j)->p2Option = 1;
+                    }
+                    else if (strcmp(recvBuf, "2") == 0)
+                    {
+                      games.at(j)->p2Option = 2;
+                    }
+                    else if (strcmp(recvBuf, "3") == 0)
+                    {
+                      games.at(j)->p2Option = 3;
+                    }
+                    gettimeofday(&games.at(j)->player2->tid, NULL);
+                  }
                 }
               }
             }
@@ -239,6 +309,8 @@ int main(int argc, char *argv[])
                   newGame.winner = -1;
                   newGame.player1 = queues.at(0);
                   newGame.player2 = queues.at(1);
+                  newGame.p1Option = 0;
+                  newGame.p2Option = 0;
                   games.push_back(&newGame);
                   for (int j = 0; j < 2; j++)
                   {
