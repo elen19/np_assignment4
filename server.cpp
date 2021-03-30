@@ -152,15 +152,37 @@ int main(int argc, char *argv[])
         }
         games.at(i)->p1Option = 0;
         games.at(i)->p2Option = 0;
-        printf("Score %d - %d\n", games.at(i)->p1score, games.at(i)->p2score);
-        sscanf(sendBuf, "Score %d - %d\n", games.at(i)->p1score, games.at(i)->p2score);
-        printf("%s",sendBuf);
+        memset(sendBuf, 0, sizeof(sendBuf));
+        sprintf(sendBuf, "Score %d - %d\n", games.at(i)->p1score, games.at(i)->p2score);
+        printf("%s", sendBuf);
         send(games.at(i)->player1->sockID, sendBuf, strlen(sendBuf), 0);
+        memset(sendBuf, 0, sizeof(sendBuf));
+        sprintf(sendBuf, "Score %d - %d\n", games.at(i)->p2score, games.at(i)->p1score);
         send(games.at(i)->player2->sockID, sendBuf, strlen(sendBuf), 0);
         if (games.at(i)->p1score < 3 && games.at(i)->p2score < 3)
         {
           send(games.at(i)->player1->sockID, OPTIONS, strlen(OPTIONS), 0);
           send(games.at(i)->player2->sockID, OPTIONS, strlen(OPTIONS), 0);
+        }
+        else
+        {
+          if (games.at(i)->p1score == 3)
+          {
+            send(games.at(i)->player1->sockID, "You won!\n", strlen("You won!\n"), 0);
+            send(games.at(i)->player2->sockID, "You lost!\n", strlen("You lost!\n"), 0);
+          }
+          else
+          {
+            send(games.at(i)->player1->sockID, "You won!\n", strlen("You won!\n"), 0);
+            send(games.at(i)->player2->sockID, "You lost!\n", strlen("You lost!\n"), 0);
+          }
+          games.at(i)->player1->isInGame = false;
+          games.at(i)->player1->isReady = false;
+          games.at(i)->player2->isInGame = false;
+          games.at(i)->player2->isReady = false;
+          send(games.at(i)->player1->sockID, MENU, strlen(MENU), 0);
+          send(games.at(i)->player2->sockID, MENU, strlen(MENU), 0);
+          games.erase(games.begin() + i);
         }
       }
       /*gettimeofday(&gameTime, NULL);
@@ -345,18 +367,33 @@ int main(int argc, char *argv[])
             else if (strcmp(recvBuf, "r") == 0)
             {
               cC = -1;
-              for (size_t j = 0; j < clients.size() && cC == -1; j++)
+              for (size_t j = 0; j < games.size() && cC == -1; j++)
               {
-                if (clients.at(j).sockID == i)
+                if (games.at(j)->player1->sockID == i)
                 {
-                  cC = j;
+                  games.at(j)->player1->isReady = true;
+                  cC = games.at(j)->player1->sockID;
+                }
+                else if (games.at(j)->player2->sockID == i)
+                {
+                  games.at(j)->player2->isReady = true;
+                  cC = games.at(j)->player2->sockID;
+                }
+
+                if (games.at(j)->player1->isReady && games.at(j)->player2->isReady)
+                {
+                  send(games.at(j)->player1->sockID, OPTIONS, strlen(OPTIONS), 0);
+                  send(games.at(j)->player2->sockID, OPTIONS, strlen(OPTIONS), 0);
+                }
+                else
+                {
+
+                  send(cC, "Waiting for other player to be ready.\n", strlen("Waiting for other player to be ready.\n"), 0);
                 }
               }
-              if (cC > -1 && !clients.at(cC).inQueue && !clients.at(cC).isReady && clients.at(cC).isInGame)
-              {
-                clients.at(cC).isReady = true;
-                send(i, "Waiting for other player to be ready.\n", strlen("Waiting for other player to be ready.\n"), 0);
-              }
+            }
+            else if (strcmp(recvBuf, "1") == 0 || strcmp(recvBuf, "2") == 0 || strcmp(recvBuf, "3") == 0)
+            {
             }
             else
             {
