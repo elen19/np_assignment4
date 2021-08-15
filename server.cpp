@@ -69,9 +69,6 @@ int main(int argc, char *argv[])
   sa.ai_family = AF_UNSPEC;
   sa.ai_socktype = SOCK_STREAM;
   sa.ai_flags = AI_PASSIVE;
-  struct timeval tv;
-  tv.tv_sec = 5;
-  tv.tv_usec = 0;
   if (int rv = getaddrinfo(Desthost, Destport, &sa, &si) != 0)
   {
     fprintf(stderr, "%s\n", gai_strerror(rv));
@@ -97,7 +94,6 @@ int main(int argc, char *argv[])
     printf("Couldn't create/bind socket.\n");
     exit(0);
   }
-  //setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (const char *)&tv, sizeof(tv));
   freeaddrinfo(si);
 
   if (listen(sockfd, 5) != 0)
@@ -554,7 +550,6 @@ int main(int argc, char *argv[])
                   cC=j;
                 }
               }
-            }
             if (cC > -1 && !clients.at(cC).inQueue && !clients.at(cC).isReady && !clients.at(cC).isInGame && !clients.at(cC).spectating && queues.size()<2)
             {
               clients.at(cC).inQueue = true;
@@ -573,53 +568,179 @@ int main(int argc, char *argv[])
                   }
                 }
               }
-            }//Checka måsvingen här nästa gång
-          else if (strcmp(recvBuf, "9") == 0)
+            }
+          }
+          else if(strstr(recvBuf,"2")!=nullptr)
+          {
+            cC=-1;
+              for(size_t j=0; j<clients.size()&&cC==-1;j++)
+              {
+                if(clients.at(j).sockID==i)
+                {
+                  cC=j;
+                }
+              }
+              if(cC >-1 && !clients.at(cC).isInGame && !clients.at(cC).inQueue && !clients.at(cC).isReady && !clients.at(cC).spectating)
+              {
+                if(games.size()>0)
+                {
+                  send(clients.at(cC).sockID,"Choose a game to spectate, press '9' to leave.\n", strlen("Choose a game to spectate, press '9' to leave.\n"),0);
+                  for(size_t j = 0; j<games.size();j++)
+                  {
+                    clients.at(cC).spectating=true;
+                    memset(sendBuf,0,sizeof(sendBuf));
+                    sprintf(sendBuf,"%ld\n",j+1);
+                    send(clients.at(cC).sockID,sendBuf,strlen(sendBuf),0);
+                    memset(recvBuf,0,sizeof(recvBuf));
+                    sprintf(recvBuf,"-2");
+                  }
+                }
+                else
+                {
+                  send(clients.at(cC).sockID,"No games right now, check again later.\n", strlen("No games right now, check again later.\n"), 0);
+                  send(clients.at(cC).sockID, MENU, strlen(MENU),0);
+                  clients.at(cC).spectating=false;
+                  clients.at(cC).gameID=-1;
+                }
+              }
+          }
+          else if(strstr(recvBuf,"3")!=nullptr)
+          {
+            cC=-1;
+            for(size_t j=0; j<clients.size()&&cC==-1;j++)
+            {
+              if(clients.at(j).sockID==i)
+              {
+                cC=j;
+               }
+            }
+            if(timeScore.size()>0 && !clients.at(cC).isInGame && !clients.at(cC).inQueue && !clients.at(cC).isReady && !clients.at(cC).spectating)
+            {
+              for(size_t j = 0;j<timeScore.size();j++)
+              {
+                for(size_t g=0;g<timeScore.size();g++)
+                {
+                  if(timeScore.at(g)>timeScore.at(j))
+                  {
+                    size_t copy = timeScore.at(g);
+                    timeScore.at(g)=timeScore.at(j);
+                    timeScore.at(j)=copy;
+                  }
+                }
+              }
+              for(size_t j =0;j<timeScore.size();j++)
+              {
+                memset(sendBuf,0,sizeof(sendBuf));
+                sprintf(sendBuf,"Avrage time of the winner was: %ld\n", timeScore.at(j));
+                send(clients.at(cC).sockID,sendBuf,strlen(sendBuf),0);
+              }
+              send(clients.at(cC).sockID,MENU,strlen(MENU),0);
+            }
+          }
+          else if (strstr(recvBuf, "9") != nullptr)
           {
             cC = -1;
-            for (size_t j = 0; j < queues.size() && cC == -1; j++)
+            for (size_t j = 0; j < clients.size() && cC == -1; j++)
             {
-              if (queues.at(j)->sockID == i)
+              if (clients.at(j).sockID == i)
               {
                 cC = j;
               }
             }
-            if (cC > -1 && queues.at(cC)->inQueue && !queues.at(cC)->isReady && !queues.at(cC)->isInGame)
+            if(cC>-1 && clients.at(cC).inQueue)
             {
-              queues.at(cC)->inQueue = false;
-              queues.erase((queues.begin() + cC));
-              send(i, MENU, strlen(MENU), 0);
+              if(clients.at(cC).inQueue && !clients.at(cC).isReady && !clients.at(cC).isInGame)
+              {
+                cC=-1;
+                for (size_t j = 0; j < queues.size() && cC == -1; j++)
+                {
+                  if (queues.at(j)->sockID == i)
+                  {
+                    cC = j;
+                  }
+                }
+                queues.at(cC)->inQueue = false;
+                send(queues.at(cC)->sockID, MENU, strlen(MENU), 0);
+                queues.erase((queues.begin() + cC));
+              }
+            }
+            else if(cC>-1 && clients.at(cC).spectating)
+            {
+              clients.at(cC).spectating=false;
+              clients.at(cC).gameID=-1;
+              send(clients.at(cC).sockID, MENU, strlen(MENU), 0);
             }
           }
-          else if (strcmp(recvBuf, "r") == 0)
+          else if (strstr(recvBuf, "r") != nullptr)
           {
             cC = -1;
-            for (size_t j = 0; j < games.size() && cC == -1; j++)
+            for (size_t j = 0; j < clients.size() && cC == -1; j++)
             {
-              if (games.at(j)->player1->sockID == i)
+              if (clients.at(j).sockID == i)
               {
-                games.at(j)->player1->isReady = true;
-                cC = games.at(j)->player1->sockID;
+                cC = j;
               }
-              else if (games.at(j)->player2->sockID == i)
+            }
+            if(queues.size()==2)
+            {
+              for(size_t j = 0; j <queues.size();j++)
               {
-                games.at(j)->player2->isReady = true;
-                cC = games.at(j)->player2->sockID;
+                if(queues.at(j)->sockID==i)
+                {
+                  queues.at(j)->inQueue=false;
+                  queues.at(j)->isReady = true;
+                }
               }
+            }
+            if(queues.at(0)->isReady && !queues.at(1)->isReady)
+            {
+              send(queues.at(0)->sockID, "Waiting for other player to be ready.\n", strlen("Waiting for other player to be ready.\n"), 0);
+              break;
+            }
+            else if(!queues.at(0)->isReady && queues.at(1)->isReady)
+            {
+              send(queues.at(1)->sockID,"Waiting for other player to be ready.\n", strlen("Waiting for other player to be ready.\n"), 0);
+              break;
+            }
+            if(queues.at(0)->isReady && queues.at(1)->isReady)
+            {
+              struct game newGame;
+              newGame.p1score=0;
+              newGame.p2score=0;
+              newGame.p1Option=-1;
+              newGame.p2Option=-1;
+              newGame.winner=-1;
+              newGame.player1=queues.at(0);
+              newGame.player2 = queues.at(1);
+              gettimeofday(&newGame.tid, NULL);
+              games.push_back(&newGame);
 
-              if (games.at(j)->player1->isReady && games.at(j)->player2->isReady)
+              for(size_t j=0;j<clients.size();j++)
               {
-                send(games.at(j)->player1->sockID, OPTIONS, strlen(OPTIONS), 0);
-                send(games.at(j)->player2->sockID, OPTIONS, strlen(OPTIONS), 0);
+                if(clients.at(j).sockID==queues.at(0)->sockID || clients.at(j).sockID == queues.at(1)->sockID)
+                {
+                  clients.at(j).gameID = games.size()-1;
+                  gettimeofday(&clients.at(j).tid,NULL);
+                }
               }
-              else
+              for(int j=0; j<2; j++)
               {
-
-                send(cC, "Waiting for other player to be ready.\n", strlen("Waiting for other player to be ready.\n"), 0);
+                queues.erase(queues.begin());
+              }
+              if(games.size()>0)
+              {
+                for(size_t j = 0; j<games.size(); j++)
+                {
+                  if(games.at(j)->player1->isReady && games.at(j)->player2->isReady)
+                  {
+                    games.at(j)->player1->isInGame=true;
+                    games.at(j)->player2->isInGame=true;
+                  }
+                }
               }
             }
           }
-          else if (strcmp(recvBuf, "1") == 0 || strcmp(recvBuf, "2") == 0 || strcmp(recvBuf, "3") == 0)
+          else if (strstr(recvBuf, "1") != nullptr || strstr(recvBuf, "2") != nullptr || strstr(recvBuf, "3") != nullptr)
           {
           }
           else
