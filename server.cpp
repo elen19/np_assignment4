@@ -222,6 +222,8 @@ int main(int argc, char *argv[])
 									send(clients.at(g).sockID, sendBuf, strlen(sendBuf), 0);
 									memset(sendBuf, 0, sizeof(sendBuf));
 									sprintf(sendBuf, "Score %d - %d\n", clients.at(j).score, clients.at(g).score);
+									clients.at(j).totalTime = clients.at(j).totalTime + (gameTime.tv_sec - games.at(i)->tid.tv_sec);
+									clients.at(g).totalTime = clients.at(g).totalTime + (gameTime.tv_sec - games.at(i)->tid.tv_sec);
 									for (size_t k = 0; k < clients.size(); k++)
 									{
 										if (clients.at(k).spectating && clients.at(k).gameID == i)
@@ -248,7 +250,7 @@ int main(int argc, char *argv[])
 										int rounds = 0;
 										size_t averageTime = 0;
 										rounds = (clients.at(j).score + clients.at(g).score);
-										averageTime = (clients.at(j).totalTime / rounds);
+										averageTime = (clients.at(g).totalTime / rounds);
 										send(clients.at(g).sockID, "You won!\n", strlen("You won!\n"), 0);
 										send(clients.at(j).sockID, "You lost!\n", strlen("You lost!\n"), 0);
 										timeScore.push_back(averageTime);
@@ -646,23 +648,30 @@ int main(int argc, char *argv[])
 									struct game newGame;
 									newGame.p1score = 0;
 									newGame.p2score = 0;
-									newGame.p1Option = -1;
-									newGame.p2Option = -1;
+									newGame.p1Option = 0;
+									newGame.p2Option = 0;
 									newGame.winner = -1;
 									newGame.player1 = queues.at(0);
 									newGame.player2 = queues.at(1);
+									newGame.player1->isReady = true;
+									newGame.player2->isReady = true;
 									gettimeofday(&newGame.tid, NULL);
 									games.push_back(&newGame);
 
 									for (size_t j = 0; j < clients.size(); j++)
 									{
-										if (clients.at(j).sockID == queues.at(0)->sockID || clients.at(j).sockID == queues.at(1)->sockID)
+										if (clients.at(j).sockID == queues.at(0)->sockID)
 										{
 											clients.at(j).gameID = games.size() - 1;
 											gettimeofday(&clients.at(j).tid, NULL);
 										}
+										else if(clients.at(j).sockID == queues.at(1)->sockID)
+										{
+											clients.at(j).gameID = games.size() - 1;
+											gettimeofday(&clients.at(j).tid,NULL);
+										}
 									}
-									for (int j = 0; j < 2; j++)
+									for (int b = 0; b < 2; b++)
 									{
 										queues.erase(queues.begin());
 									}
@@ -676,17 +685,25 @@ int main(int argc, char *argv[])
 												games.at(j)->player2->isInGame = true;
 												for (size_t g = 0; g < clients.size(); g++)
 												{
-													if (clients.at(g).sockID == games.at(j)->player1->sockID || clients.at(g).sockID == games.at(j)->player2->sockID)
+													if (clients.at(g).sockID == games.at(j)->player1->sockID)
+													{
+														clients.at(g).isInGame = true;
+													}
+													else if(clients.at(g).sockID == games.at(j)->player2->sockID)
 													{
 														clients.at(g).isInGame = true;
 													}
 												}
+												games.at(j)->player1->isReady = false;
+												games.at(j)->player2->isReady = false;
 											}
 										}
 									}
 								}
 							}
-							else if (strstr(recvBuf, "1") != nullptr || strstr(recvBuf, "2") != nullptr || strstr(recvBuf, "3") != nullptr) {}
+							else if (strstr(recvBuf, "1") != nullptr || strstr(recvBuf, "2") != nullptr || strstr(recvBuf, "3") != nullptr) 
+							{
+							}
 							else
 							{
 								send(i, "ERROR Wrong format on the message sent.\n", strlen("ERROR Wrong format on the message sent.\n"), 0);
@@ -707,7 +724,7 @@ int main(int argc, char *argv[])
 						size_t checker = -1;
 						for (size_t j = 0; j < games.size(); j++)
 						{
-							for (size_t g = 0; g < games.size(); g++)
+							for (size_t g = 0; g < clients.size(); g++)
 							{
 								if (clients.at(g).sockID == i)
 								{
@@ -735,7 +752,7 @@ int main(int argc, char *argv[])
 											sprintf(recvBuf, "-2");
 										}
 									}
-									else if (clients.at(cC).spectating && /*clients.at(cC).gameID==h && */ clients.at(cC).sockID == i)
+									else if (clients.at(cC).spectating && clients.at(cC).gameID==h &&  clients.at(cC).sockID == i)
 									{
 										if (strstr(recvBuf, "-9") != nullptr || (reciver > 0 && strcmp(recvBuf, "-2") != 0))
 										{
