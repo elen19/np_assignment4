@@ -534,6 +534,11 @@ int main(int argc, char *argv[])
 										}
 									}
 								}
+								else if (cC > -1 && !clients.at(cC).inQueue && !clients.at(cC).isReady && !clients.at(cC).isInGame && !clients.at(cC).spectating && queues.size() >= 2)
+								{
+									send(clients.at(cC).sockID, "The queue is full, try again later.\n", strlen("The queue is full, try again later.\n"), 0);
+									send(clients.at(cC).sockID, MENU, strlen(MENU), 0);
+								}
 							}
 							else if (strstr(recvBuf, "2") != nullptr)
 							{
@@ -652,7 +657,6 @@ int main(int argc, char *argv[])
 									{
 										if (queues.at(j)->sockID == i)
 										{
-											queues.at(j)->inQueue = false;
 											queues.at(j)->isReady = true;
 										}
 									}
@@ -669,6 +673,10 @@ int main(int argc, char *argv[])
 								}
 								if (queues.at(0)->isReady && queues.at(1)->isReady)
 								{
+									queues.at(0)->inQueue = false;
+									queues.at(0)->isReady = false;
+									queues.at(1)->isReady = false;
+									queues.at(1)->inQueue = false;
 									struct game newGame;
 									newGame.p1score = 0;
 									newGame.p2score = 0;
@@ -822,6 +830,111 @@ int main(int argc, char *argv[])
 							{
 								if (i == clients.at(j).sockID)
 								{
+									size_t currentGame = clients.at(j).gameID;
+									if (clients.at(j).isInGame && !clients.at(j).spectating)
+									{
+										if (games.at(currentGame)->player1->sockID == clients.at(j).sockID)
+										{
+											send(games.at(currentGame)->player2->sockID, "The other player left, game will be closed.\n", strlen("The other player left, game will be closed.\n"), 0);
+											games.at(currentGame)->player1->totalTime = 0;
+											games.at(currentGame)->player1->gameID = -1;
+											games.at(currentGame)->player1->isInGame = false;
+											games.at(currentGame)->player1->isReady = false;
+											games.at(currentGame)->player1->inQueue = false;
+											games.at(currentGame)->player1->answer = 0;
+											games.at(currentGame)->player1->score = 0;
+											games.at(currentGame)->player2->totalTime = 0;
+											games.at(currentGame)->player2->gameID = -1;
+											games.at(currentGame)->player2->isInGame = false;
+											games.at(currentGame)->player2->isReady = false;
+											games.at(currentGame)->player2->inQueue = false;
+											games.at(currentGame)->player2->answer = 0;
+											games.at(currentGame)->player2->score = 0;
+											games.erase(games.begin() + currentGame);
+											for (size_t p = 0; p < clients.size(); p++)
+											{
+												if (clients.at(p).gameID > currentGame)
+												{
+													clients.at(p).gameID--;
+												}
+											}
+											send(games.at(currentGame)->player2->sockID, MENU, strlen(MENU), 0);
+										}
+										else if (games.at(currentGame)->player2->sockID == clients.at(j).sockID)
+										{
+											send(games.at(currentGame)->player1->sockID, "The other player left, game will be closed.\n", strlen("The other player left, game will be closed.\n"), 0);
+											send(games.at(currentGame)->player1->sockID, MENU, strlen(MENU), 0);
+											games.at(currentGame)->player1->totalTime = 0;
+											games.at(currentGame)->player1->gameID = -1;
+											games.at(currentGame)->player1->isInGame = false;
+											games.at(currentGame)->player1->isReady = false;
+											games.at(currentGame)->player1->inQueue = false;
+											games.at(currentGame)->player1->answer = 0;
+											games.at(currentGame)->player1->score = 0;
+											games.at(currentGame)->player2->totalTime = 0;
+											games.at(currentGame)->player2->gameID = -1;
+											games.at(currentGame)->player2->isInGame = false;
+											games.at(currentGame)->player2->isReady = false;
+											games.at(currentGame)->player2->inQueue = false;
+											games.at(currentGame)->player2->answer = 0;
+											games.at(currentGame)->player2->score = 0;
+											games.erase(games.begin() + currentGame);
+											for (size_t p = 0; p < clients.size(); p++)
+											{
+												if (clients.at(p).gameID > currentGame)
+												{
+													clients.at(p).gameID--;
+												}
+											}
+										}
+									}
+									else if (clients.at(j).inQueue && !clients.at(j).isReady)
+									{
+										if (queues.size() > 1)
+										{
+											for (size_t q = 0; q < queues.size(); q++)
+											{
+												if (queues.at(q)->sockID == clients.at(j).sockID)
+												{
+													for (size_t c = 0; c < queues.size(); c++)
+													{
+														if (queues.at(c)->sockID != clients.at(j).sockID)
+														{
+															send(queues.at(c)->sockID, "The other player disconnected, you will return to the lobby.\n", strlen("The other player disconnected, you will return to the lobby.\n"), 0);
+															queues.at(c)->inQueue = false;
+															queues.at(c)->isReady = false;
+															queues.at(c)->isInGame = false;
+															send(queues.at(c)->sockID, MENU, strlen(MENU), 0);
+															break;
+														}
+													}
+												}
+											}
+											for (size_t q = 0; q < queues.size(); q++)
+											{
+												queues.erase(queues.begin());
+											}
+											clients.at(j).isReady = false;
+											clients.at(j).inQueue = false;
+											clients.at(j).isInGame = false;
+											clients.at(j).spectating = false;
+											clients.at(j).gameID = -1;
+										}
+										else
+										{
+											clients.at(j).isReady = false;
+											clients.at(j).inQueue = false;
+											clients.at(j).isInGame = false;
+											clients.at(j).spectating = false;
+											queues.erase(queues.begin());
+										}
+									}
+									else if (clients.at(j).spectating)
+									{
+										clients.at(j).spectating = false;
+										clients.at(j).isInGame = false;
+										clients.at(j).gameID = -1;
+									}
 									clients.erase(clients.begin() + j);
 									FD_CLR(i, &currentSockets);
 									break;
